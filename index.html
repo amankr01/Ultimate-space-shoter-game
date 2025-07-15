@@ -9,17 +9,21 @@
       padding: 0;
       box-sizing: border-box;
     }
-    body {
+    body,html {
       background: #111;
       overflow: hidden;
       touch-action: manipulation;
       font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      height: 100%;
     }
     
     canvas {
       border: 5px solid darkred;
-      margin: 0 auto;
-      display: block;
       background: #000;
       box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
     }
@@ -109,6 +113,10 @@ let canFire = true;
 const leftBtn = { x: 10, y: 540, w: 80, h: 50 };
 const rightBtn = { x: 90, y: 540, w: 80, h: 50 };
 
+// for stars
+let stars = [];
+let pushStar = true;
+
 // Initialize Game
 window.onload = function() {
   canvas = document.getElementById("canvas");
@@ -196,23 +204,42 @@ function gameLoop(timestamp) {
     drawGameOver();
     return;
   }
-
-  ctx.clearRect(0, 0, B_WIDTH, B_HEIGHT);
   
+  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+  ctx.fillRect(0, 0, B_WIDTH, B_HEIGHT);
+  moveStars();
   updatePlayer();
   updateBullets();
   updateEnemies(timestamp);
   checkCollisions();
+  renderStars();
   drawUI();
   drawControls();
-
+  drawStar();
+  
   requestAnimationFrame(gameLoop);
 }
 
 function updatePlayer() {
   // Movement
-  if (left) player.x -= PLAYER_SPEED;
-  if (right) player.x += PLAYER_SPEED;
+  if (left){
+    player.x -= PLAYER_SPEED;
+    
+    ctx.fillStyle = "rgba(107, 107, 126, 0.5)";
+    ctx.fillRect(leftBtn.x, leftBtn.y, leftBtn.w, leftBtn.h);
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.fillText("←", leftBtn.x + 35, leftBtn.y + 35);
+  }
+  if (right) {
+    player.x += PLAYER_SPEED;
+    // Right button
+    ctx.fillStyle = "rgba(107, 107, 126, 0.5)";
+    ctx.fillRect(rightBtn.x, rightBtn.y, rightBtn.w, rightBtn.h);
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.fillText("→", rightBtn.x + 35, rightBtn.y + 35);
+  }
   
   // Boundaries
   const half = player.size / 2;
@@ -354,7 +381,7 @@ function isTriangleCollidingWithBox(tri, box) {
 
 function drawUI() {
   // Lives display
-  ctx.fillStyle = "red";
+  ctx.fillStyle = "white";
   for (let i = 0; i < player.lives; i++) {
     ctx.beginPath();
     ctx.moveTo(20 + i * 30, 20);
@@ -402,6 +429,48 @@ function drawGameOver() {
   
   ctx.textAlign = "left";
 }
+
+
+
+//stars fun
+function pushStars() {
+  let star_x = Math.random() * B_WIDTH;
+  let star_y = -10;
+  let xspeed = Math.random() * 2 + 1; // Speed between 1 and 3
+  let star = { x: star_x, y: star_y, h: 1, w: 1, speed: xspeed };
+  stars.push(star);
+}
+
+function renderStars() {
+  if (pushStar) {
+    pushStars();
+    pushStar = false;
+    setTimeout(() => pushStar = true, 200); // Faster stars
+  }
+}
+
+function drawStar() {
+  for (let i = 0; i < stars.length; i++) {
+    let star = stars[i];
+    draw(star);
+  }
+}
+
+function draw(star) {
+  ctx.fillStyle = 'white';
+  ctx.fillRect(star.x, star.y, star.w, star.h);
+}
+
+function moveStars() {
+  for (let i = stars.length - 1; i >= 0; i--) {
+    stars[i].y += stars[i].speed;
+    if (stars[i].y > B_HEIGHT) {
+      stars.splice(i, 1);
+    }
+  }
+}
+
+
 
 function restartGame() {
   startGame();
