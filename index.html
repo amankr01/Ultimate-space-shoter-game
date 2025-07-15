@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Triangle Shooter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #111;
+      overflow: hidden;
+      touch-action: manipulation;
+      font-family: Arial, sans-serif;
+    }
+    
+    canvas {
+      border: 5px solid darkred;
+      margin: 0 auto;
+      display: block;
+      background: #000;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    }
+    
+    #startBtn {
+      height: 50px;
+      width: 150px;
+      background: #3243FF;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      font-size: 18px;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(50, 67, 255, 0.8);
+      transition: all 0.2s;
+    }
+    
+    #startBtn:hover {
+      transform: translate(-50%, -50%) scale(1.1);
+      background: #4252FF;
+    }
+    
+    #restartBtn {
+      display: none;
+      height: 40px;
+      width: 120px;
+      background: #FF5733;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: bold;
+      font-size: 16px;
+      position: fixed;
+      top: 60%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+   <button id="startBtn">Start Game</button>
+   <button id="restartBtn">Play Again</button>
+   <canvas id="canvas"></canvas>
+
+<script>
+// Game Constants
+const B_WIDTH = 360;
+const B_HEIGHT = 600;
+const PLAYER_SPEED = 5;
+const BULLET_SPEED = 7;
+const ENEMY_SPAWN_RATE = 800; // ms
+
+// Game Variables
+let canvas, ctx;
+let started = false;
+let gameOver = false;
+let lastEnemySpawn = 0;
+let scoreThreshold = 10;
+
+// Player Object
+let player = {
+  x: B_WIDTH / 2,
+  y: 500,
+  size: 30,
+  lives: 3,
+  score: 0,
+  p1: {}, p2: {}, p3: {}
+};
+
+// Game Elements
+let bullets = [];
+let enemies = [];
+let gameSpeed = 1.6;
+
+// Controls
+let left = false;
+let right = false;
+let canFire = true;
+const leftBtn = { x: 10, y: 540, w: 80, h: 50 };
+const rightBtn = { x: 90, y: 540, w: 80, h: 50 };
+
+// Initialize Game
+window.onload = function() {
+  canvas = document.getElementById("canvas");
+  ctx = canvas.getContext("2d");
+  canvas.width = B_WIDTH;
+  canvas.height = B_HEIGHT;
+  
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("restartBtn").addEventListener("click", restartGame);
+  
+  initControls();
+};
+
+function startGame() {
+  started = true;
+  gameOver = false;
+  document.getElementById("startBtn").style.display = "none";
+  document.getElementById("restartBtn").style.display = "none";
+  resetGame();
+  requestAnimationFrame(gameLoop);
+}
+
+function resetGame() {
+  player = {
+    x: B_WIDTH / 2,
+    y: 500,
+    size: 30,
+    lives: 3,
+    score: 0,
+    p1: {}, p2: {}, p3: {}
+  };
+  bullets = [];
+  enemies = [];
+  gameSpeed = 1.6;
+  scoreThreshold = 10;
+  lastEnemySpawn = 0;
+}
+
+function initControls() {
+  // Keyboard Controls
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') right = true;
+    if (e.key === ' ' && canFire && !gameOver) {
+      fire();
+      canFire = false;
+      setTimeout(() => canFire = true, 200);
+    }
+  });
+  
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') right = false;
+  });
+
+  // Touch/Mouse Controls
+  canvas.addEventListener('mousedown', handleInput);
+  canvas.addEventListener('mouseup', () => { left = false; right = false; });
+  canvas.addEventListener('touchstart', handleInput, { passive: false });
+  canvas.addEventListener('touchend', () => { left = false; right = false; });
+}
+
+function handleInput(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX || e.touches[0].clientX) - rect.left;
+  const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+  if (x >= leftBtn.x && x <= leftBtn.x + leftBtn.w &&
+      y >= leftBtn.y && y <= leftBtn.y + leftBtn.h) {
+    left = true;
+  } else if (x >= rightBtn.x && x <= rightBtn.x + rightBtn.w &&
+            y >= rightBtn.y && y <= rightBtn.y + rightBtn.h) {
+    right = true;
+  } else if (!gameOver && canFire) {
+    fire();
+    canFire = false;
+    setTimeout(() => canFire = true, 200);
+  }
+}
+
+// Main Game Loop
+function gameLoop(timestamp) {
+  if (gameOver) {
+    drawGameOver();
+    return;
+  }
+
+  ctx.clearRect(0, 0, B_WIDTH, B_HEIGHT);
+  
+  updatePlayer();
+  updateBullets();
+  updateEnemies(timestamp);
+  checkCollisions();
+  drawUI();
+  drawControls();
+
+  requestAnimationFrame(gameLoop);
+}
+
+function updatePlayer() {
+  // Movement
+  if (left) player.x -= PLAYER_SPEED;
+  if (right) player.x += PLAYER_SPEED;
+  
+  // Boundaries
+  const half = player.size / 2;
+  if (player.x - half < 0) player.x = half;
+  if (player.x + half > B_WIDTH) player.x = B_WIDTH - half;
+  
+  // Update triangle points
+  player.p1 = { x: player.x, y: player.y - half };
+  player.p2 = { x: player.x - half, y: player.y + half };
+  player.p3 = { x: player.x + half, y: player.y + half };
+  
+  // Draw player
+  ctx.beginPath();
+  ctx.moveTo(player.p1.x, player.p1.y);
+  ctx.lineTo(player.p2.x, player.p2.y);
+  ctx.lineTo(player.p3.x, player.p3.y);
+  ctx.closePath();
+  ctx.fillStyle = "#00FF00";
+  ctx.fill();
+  ctx.strokeStyle = "white";
+  ctx.stroke();
+}
+
+function fire() {
+  bullets.push({
+    x: player.x - 3.5,
+    y: player.y - player.size / 2 - 10,
+    h: 15,
+    w: 7,
+    speed: BULLET_SPEED
+  });
+}
+
+function updateBullets() {
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const bullet = bullets[i];
+    bullet.y -= bullet.speed;
+    
+    // Remove bullets that go off screen
+    if (bullet.y + bullet.h < 0) {
+      bullets.splice(i, 1);
+    } else {
+      // Draw bullet
+      ctx.fillStyle = '#00FFFF';
+      ctx.fillRect(bullet.x, bullet.y, bullet.w, bullet.h);
+    }
+  }
+}
+
+function updateEnemies(timestamp) {
+  // Spawn new enemies
+  if (timestamp - lastEnemySpawn > ENEMY_SPAWN_RATE - Math.min(player.score * 5, 700)) {
+    createEnemy();
+    lastEnemySpawn = timestamp;
+  }
+  
+  // Update existing enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const enemy = enemies[i];
+    enemy.y += gameSpeed;
+    
+    // Remove enemies that go off screen
+    if (enemy.y > B_HEIGHT) {
+      enemies.splice(i, 1);
+    } else {
+      // Draw enemy
+      ctx.fillStyle = enemy.color;
+      ctx.fillRect(enemy.x, enemy.y, enemy.w, enemy.h);
+    }
+  }
+}
+
+function createEnemy() {
+  const size = 30 + Math.random() * 20;
+  enemies.push({ 
+    x: Math.random() * (B_WIDTH - size), 
+    y: -size, 
+    w: size, 
+    h: size,
+    color: `hsl(${Math.random() * 60}, 100%, 50%)`
+  });
+}
+
+function checkCollisions() {
+  // Bullet-Enemy collisions
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const bullet = bullets[i];
+    
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const enemy = enemies[j];
+      
+      if (isColliding(bullet, enemy)) {
+        bullets.splice(i, 1);
+        enemies.splice(j, 1);
+        player.score += 1;
+        
+        // Increase difficulty
+        if (player.score >= scoreThreshold) {
+          gameSpeed += 0.2;
+          scoreThreshold += 10;
+        }
+        break;
+      }
+    }
+  }
+  
+  // Player-Enemy collisions
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const enemy = enemies[i];
+    
+    if (isTriangleCollidingWithBox(player, enemy)) {
+      enemies.splice(i, 1);
+      player.lives -= 1;
+      
+      // Game over check
+      if (player.lives <= 0) {
+        gameOver = true;
+        document.getElementById("restartBtn").style.display = "block";
+      }
+    }
+  }
+}
+
+function isColliding(rect1, rect2) {
+  return (
+    rect1.x < rect2.x + rect2.w &&
+    rect1.x + rect1.w > rect2.x &&
+    rect1.y < rect2.y + rect2.h &&
+    rect1.y + rect1.h > rect2.y
+  );
+}
+
+function isTriangleCollidingWithBox(tri, box) {
+  return [tri.p1, tri.p2, tri.p3].some(p =>
+    p.x >= box.x && p.x <= box.x + box.w &&
+    p.y >= box.y && p.y <= box.y + box.h
+  );
+}
+
+function drawUI() {
+  // Lives display
+  ctx.fillStyle = "red";
+  for (let i = 0; i < player.lives; i++) {
+    ctx.beginPath();
+    ctx.moveTo(20 + i * 30, 20);
+    ctx.lineTo(10 + i * 30, 40);
+    ctx.lineTo(30 + i * 30, 40);
+    ctx.closePath();
+    ctx.fill();
+  }
+  
+  // Score display
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.textAlign = "left";
+  ctx.fillText("Score: " + player.score, B_WIDTH - 120, 30);
+}
+
+function drawControls() {
+  // Left button
+  ctx.fillStyle = "rgba(100, 100, 255, 0.5)";
+  ctx.fillRect(leftBtn.x, leftBtn.y, leftBtn.w, leftBtn.h);
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText("←", leftBtn.x + 35, leftBtn.y + 35);
+  
+  // Right button
+  ctx.fillStyle = "rgba(100, 100, 255, 0.5)";
+  ctx.fillRect(rightBtn.x, rightBtn.y, rightBtn.w, rightBtn.h);
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText("→", rightBtn.x + 35, rightBtn.y + 35);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, B_WIDTH, B_HEIGHT);
+  
+  ctx.fillStyle = "red";
+  ctx.font = "30px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("GAME OVER", B_WIDTH / 2, B_HEIGHT / 2 - 30);
+  
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText("Final Score: " + player.score, B_WIDTH / 2, B_HEIGHT / 2 + 20);
+  
+  ctx.textAlign = "left";
+}
+
+function restartGame() {
+  startGame();
+}
+</script>
+</body>
+</html>
